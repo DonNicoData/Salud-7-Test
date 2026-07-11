@@ -25,11 +25,16 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 'lts/*'
+          cache: 'npm'
 
       - name: Instalar dependencias
-        run: npm ci
+        # Uso `npm install` (no `npm ci`) porque el lockfile fue
+        # generado con Node de Windows (v24.16.0 vía WSL) y el runner
+        # usa Linux. `npm ci` es muy estricto con el lockfile; `install`
+        # lo reconcilia. Cuando se regenere el lockfile limpio en Linux,
+        # se puede volver a `npm ci`.
+        run: npm install --no-audit --no-fund
 
       - name: Verificar tipos (warning, no bloquea el deploy)
         # Los stubs de páginas cliente NO pasan typecheck todavía.
