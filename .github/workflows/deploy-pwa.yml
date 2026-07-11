@@ -10,6 +10,7 @@ permissions:
   pages: write
   id-token: write
 
+# Evitar que se ejecuten deploys concurrentes
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -30,39 +31,6 @@ jobs:
           fi
           echo "=== Contenido de dist/ ==="
           ls -la dist/
-
-      - name: Habilitar GitHub Pages via API (si no está habilitado)
-        # El API para crear deployments de Pages devuelve 404 si Pages
-        # no está habilitado en el repo. Habilitarlo manualmente en la
-        # UI requiere 1 click. Este step lo automatiza via la API con
-        # el GITHUB_TOKEN que tiene permiso pages:write.
-        # Si ya está habilitado, el API devuelve 409 Conflict (lo
-        # tratamos como éxito, no queremos fallar el build).
-        run: |
-          RESPONSE=$(curl -sS -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/${{ github.repository }}/pages \
-            -d '{"build_type":"workflow","source":{"branch":"main","path":"/"}}' \
-            -w "\nHTTP_STATUS:%{http_code}" 2>&1) || true
-          STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-          BODY=$(echo "$RESPONSE" | grep -v "HTTP_STATUS:")
-          echo "Status: $STATUS"
-          echo "Body: $BODY"
-          if [ "$STATUS" = "201" ]; then
-            echo "::notice::Pages habilitado OK (201 Created)"
-          elif [ "$STATUS" = "409" ]; then
-            echo "::notice::Pages ya estaba habilitado (409 Conflict) - OK"
-          elif [ "$STATUS" = "404" ]; then
-            echo "::error::Repo no encontrado o sin acceso (404)"
-            exit 1
-          elif [ "$STATUS" = "403" ]; then
-            echo "::error::Sin permisos para habilitar Pages (403). El token del workflow no tiene pages:write."
-            exit 1
-          else
-            echo "::warning::Status inesperado: $STATUS. Continuando, el deploy step va a fallar si Pages no está habilitado."
-          fi
 
       - name: Subir artefacto
         uses: actions/upload-pages-artifact@v3
