@@ -10,7 +10,6 @@ permissions:
   pages: write
   id-token: write
 
-# Evitar que se ejecuten deploys concurrentes
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -25,33 +24,33 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
-          cache: 'npm'
+          node-version: '20'
 
       - name: Instalar dependencias
-        # Uso `npm install` (no `npm ci`) porque el lockfile fue
-        # generado con Node de Windows (v24.16.0 vía WSL) y el runner
-        # usa Linux. `npm ci` es muy estricto con el lockfile; `install`
-        # lo reconcilia. Cuando se regenere el lockfile limpio en Linux,
-        # se puede volver a `npm ci`.
         run: npm install --no-audit --no-fund
 
       - name: Verificar tipos (warning, no bloquea el deploy)
         # Los stubs de páginas cliente NO pasan typecheck todavía.
-        # Cuando se reemplacen los stubs por la implementación real,
-        # quitar el `|| echo "::warning::..."` para que falle duro.
+        # Cuando se reemplacen los stubs, quitar el `||` para que falle duro.
         run: npm run typecheck || echo "::warning::typecheck falló (stubs presentes) — continuando con build:nocheck"
 
-      - name: Build Vite (con base path del repo, sin typecheck)
-        # El sitio queda en https://<usuario>.github.io/<nombre-del-repo>/
-        # VITE_BASE se setea automáticamente según el nombre del repo.
-        # Usa build:nocheck para saltar el typecheck hasta que se
-        # reemplacen los stubs de las páginas cliente (ver BUILD-STATUS.md).
-        run: npm run build:nocheck
-        env:
-          VITE_BASE: /${{ github.event.repository.name }}/
+      - name: Build Vite (verbose)
+        # Capturamos el exit code y el stderr de Vite para diagnóstico.
+        run: |
+          echo "=== Vite build con logging verbose ==="
+          npx vite build --logLevel info 2>&1 | tee /tmp/vite-build.log
+          EXIT_CODE=${PIPESTATUS[0]}
+          echo "=== Exit code: $EXIT_CODE ==="
+          if [ "$EXIT_CODE" -ne 0 ]; then
+            echo "=== Last 50 lines of vite build log: ==="
+            tail -50 /tmp/vite-build.log
+            exit $EXIT_CODE
+          fi
+          echo "=== Build OK, dist/ contents: ==="
+          ls -la dist/
 
       - name: Subir artefacto
+        if: success()
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./dist
